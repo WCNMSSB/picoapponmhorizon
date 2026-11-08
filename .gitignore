@@ -1,0 +1,20 @@
+# build artefacts
+dist/
+build/
+lsposed/build/
+lsposed/classes/
+lsposed/dex/
+*.apk
+*.zip
+*.keystore
+
+# binaries that must not be redistributed
+magisk/pico_xr_loader/files/
+lsposed/lib/
+lsposed/assets/
+
+# local
+*.log
+*.pcap
+.vs/
+__pycache__/

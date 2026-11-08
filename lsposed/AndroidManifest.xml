@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.pico.xr.compat.lsp"
+    android:versionCode="31"
+    android:versionName="0.4.1">
+
+    <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="34" />
+
+    <application
+        android:label="PICO XR LSP Helper"
+        android:allowBackup="false">
+
+        <meta-data
+            android:name="xposedmodule"
+            android:value="true" />
+        <meta-data
+            android:name="xposeddescription"
+            android:value="Routes PICO apps to the additive PICO runtime lane; Quest apps are left untouched. Also logs native library loads and grants PICO permission checks." />
+        <meta-data
+            android:name="xposedminversion"
+            android:value="82" />
+    </application>
+</manifest>

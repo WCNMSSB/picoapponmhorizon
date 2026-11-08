@@ -1,0 +1,7 @@
+id=pico_xr_loader
+name=PICO XR loader overlay
+version=v0.1.0
+versionCode=1
+author=周-zhou(WCNMSSB) and DeepSeek
+description=Bind-mounts the PICO OpenXR loader shim over installed PICO apps so their APKs stay unmodified.
+license=GPL-3.0
