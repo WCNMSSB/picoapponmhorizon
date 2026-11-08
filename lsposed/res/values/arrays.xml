@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Recommended scope for LSPosed.
+
+  These are the packages that need the module to run PICO apps on Horizon OS:
+
+    com.picovr.picostreamassistant  PICO Connect (streaming, XR, desktop input)
+    com.picovr.vrusercenter         PICO account / personal centre
+    com.bytedance.pico.matrix      PICO account platform service
+    com.picovr.store               PICO Store (installs, mostly server-side blocked)
+    com.oculus.vrshell             Horizon shell: decides VR vs 2D panel
+
+  Everything else is optional; add apps individually as needed.
+-->
+<resources>
+    <string-array name="xposedscope">
+        <item>com.picovr.picostreamassistant</item>
+        <item>com.picovr.vrusercenter</item>
+        <item>com.bytedance.pico.matrix</item>
+        <item>com.picovr.store</item>
+        <item>com.oculus.vrshell</item>
+    </string-array>
+</resources>

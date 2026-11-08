@@ -1,8 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 周-zhou (WCNMSSB) and DeepSeek
-//
-// This file is part of picoapponmhorizon.
-//
 package com.pico.xr.compat.lsp;
 
 import android.app.Application;
@@ -35,6 +30,8 @@ public class PicoXrLsp implements IXposedHookLoadPackage {
     private static final String TAG = "PicoXrLsp";
     private static final String INJECT_PATH = "/system/lib64/libpico_xr_inject.so";
     private static boolean sInjected = false;
+    /** APK path LSPosed loaded this module from; used to read assets. */
+    private static String sModulePath;
     private static final java.util.Set<String> sLogged = new java.util.HashSet<>();
 
     /** Diagnostic only. Off by default: hooking System.loadLibrary breaks hardened apps. */
@@ -447,7 +444,7 @@ public class PicoXrLsp implements IXposedHookLoadPackage {
         if (r == ROUTE_OK) {
             log("PICO app routed to the per-app PICO runtime manifest");
             // Only now, and only in this process, replace the PICO OS identity.
-            PicoOsSpoof.install(app, app.getClassLoader());
+            PicoOsSpoof.install(app, app.getClassLoader(), sModulePath);
         }
     }
 
@@ -466,8 +463,25 @@ public class PicoXrLsp implements IXposedHookLoadPackage {
         }
     }
 
+    /**
+     * Path of the module APK itself. LoadPackageParam.modulePath does not exist in
+     * Xposed API 82, but the module classes are loaded straight from the APK, so
+     * the code source gives the same thing.
+     */
+    private static String moduleApkPath() {
+        try {
+            java.security.CodeSource cs = PicoXrLsp.class.getProtectionDomain().getCodeSource();
+            if (cs != null && cs.getLocation() != null) {
+                return new java.io.File(cs.getLocation().toURI()).getAbsolutePath();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpp) {
+        sModulePath = moduleApkPath();
         /* Deliberately before the system-package guard: the Horizon shell is a
          * system app, and it is the one that decides whether a package opens as
          * a VR app or as a 2D panel. */
@@ -497,6 +511,9 @@ public class PicoXrLsp implements IXposedHookLoadPackage {
             SerialSpoof.install(lpp.classLoader);
             HiddenApiCompat.install();
             MetaManifestCompat.install(lpp.classLoader);
+            OsIdentityCompat.install(lpp.classLoader, sModulePath);
+            SwiftCompat.install(lpp.classLoader, lpp.packageName);
+            NativeLibCompat.install(lpp.classLoader, lpp.packageName);
         }
 
         String nativeDir = lpp.appInfo != null ? lpp.appInfo.nativeLibraryDir : null;

@@ -31,12 +31,14 @@ $Platform = Join-Path $AndroidSdk "platforms\android-34\android.jar"
 $Bt       = Join-Path $AndroidSdk "build-tools\34.0.0"
 $Src      = Join-Path $Repo "lsposed\src"
 $Manifest = Join-Path $Repo "lsposed\AndroidManifest.xml"
+$Assets   = Join-Path $Repo "lsposed\assets"
+$Res      = Join-Path $Repo "lsposed\res"
 $Cls      = Join-Path $Repo "lsposed\build\classes"
 $Dex      = Join-Path $Repo "lsposed\build\dex"
 $Work     = Join-Path $Repo "lsposed\build"
 $Dist     = Join-Path $Repo $Out
 
-foreach ($p in @($Platform, $XposedApi, $Manifest)) {
+foreach ($p in @($Platform, $XposedApi, $Manifest, (Join-Path $Assets "xposed_init"))) {
     if (-not (Test-Path $p)) { throw "missing prerequisite: $p" }
 }
 if (-not $Keystore) { $Keystore = Join-Path $Work "debug.keystore" }
@@ -64,8 +66,14 @@ if ($LASTEXITCODE -ne 0) { throw "d8 failed" }
 
 $unsigned = Join-Path $Work "base.apk"
 Remove-Item -Force $unsigned -ErrorAction SilentlyContinue
+$resZip = Join-Path $Work "res.zip"
+Remove-Item -Force $resZip -ErrorAction SilentlyContinue
+if (Test-Path $Res) {
+    & (Join-Path $Bt "aapt2.exe") compile --dir $Res -o $resZip
+    if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
+}
 & (Join-Path $Bt "aapt2.exe") link -o $unsigned -I $Platform `
-    --manifest $Manifest --min-sdk-version 29 --target-sdk-version 34
+    --manifest $Manifest -A $Assets $(if (Test-Path $resZip) { $resZip }) --min-sdk-version 29 --target-sdk-version 34
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 
 # Optional native payloads: the in-APK router. The module is fully functional

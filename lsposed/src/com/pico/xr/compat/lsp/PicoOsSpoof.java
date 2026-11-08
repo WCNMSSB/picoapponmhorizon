@@ -1,8 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 周-zhou (WCNMSSB) and DeepSeek
-//
-// This file is part of picoapponmhorizon.
-//
 package com.pico.xr.compat.lsp;
 
 import android.app.Application;
@@ -58,12 +53,16 @@ final class PicoOsSpoof {
         XposedBridge.log(TAG + ": " + msg);
     }
 
-    static boolean install(Application app, ClassLoader cl) {
+    static boolean install(Application app, ClassLoader cl, String modulePath) {
         if (sInstalled) {
             return true;
         }
         try {
-            InputStream in = app.getAssets().open(ASSET);
+            InputStream in = openAsset(app, modulePath);
+            if (in == null) {
+                log("cannot load " + ASSET + " (no asset in app or module)");
+                return false;
+            }
             Properties p = new Properties();
             try {
                 p.load(in);
@@ -86,6 +85,43 @@ final class PicoOsSpoof {
         sInstalled = true;
         log("installed " + PROPS.size() + " properties for " + app.getPackageName());
         return true;
+    }
+
+    /**
+     * The property table ships in the module APK, not in the target app, so try
+     * the app's own assets first (older layout) and then read it straight out of
+     * the module APK that LSPosed loaded us from.
+     */
+    private static InputStream openAsset(Application app, String modulePath) {
+        try {
+            return app.getAssets().open(ASSET);
+        } catch (Throwable ignored) {
+        }
+        // The module's own APK is on the classpath; this finds its assets entry
+        // without needing the APK path.
+        try {
+            InputStream in = PicoOsSpoof.class.getClassLoader()
+                    .getResourceAsStream("assets/" + ASSET);
+            if (in != null) {
+                return in;
+            }
+        } catch (Throwable ignored) {
+        }
+        if (modulePath == null) {
+            return null;
+        }
+        try {
+            java.util.zip.ZipFile zip = new java.util.zip.ZipFile(modulePath);
+            java.util.zip.ZipEntry entry = zip.getEntry("assets/" + ASSET);
+            if (entry == null) {
+                zip.close();
+                return null;
+            }
+            return zip.getInputStream(entry);
+        } catch (Throwable t) {
+            log("module asset failed: " + t);
+            return null;
+        }
     }
 
     private static String spoof(String key) {

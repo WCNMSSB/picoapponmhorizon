@@ -75,6 +75,88 @@ powershell -ExecutionPolicy Bypass -File tools\enable_pico_app.ps1 -Package com.
 
 Magisk 的 loader 覆盖模块需要自己准备 `files/`（见该目录的 README）。
 
+### 推荐应用（一键勾选）
+
+模块 manifest 里声明了 `xposedscope`，LSPosed 管理器会直接把这些包列为「推荐应用」，
+勾选即可，不用手工找：
+
+| 包名 | 作用 |
+| --- | --- |
+| `com.picovr.picostreamassistant` | PICO Connect（串流 / XR / 桌面输入） |
+| `com.picovr.vrusercenter` | PICO 个人中心（账号登录） |
+| `com.bytedance.pico.matrix` | PICO 账号平台服务 |
+| `com.picovr.store` | PICO 商店（能装能开，内容被服务端拒） |
+| `com.oculus.vrshell` | Horizon shell：决定 VR / 2D 面板 |
+
+其余 PICO 应用按需单独添加（`tools/enable_pico_app.ps1` 会自动加进作用域）。
+
+### 设置页：两级选择（应用 → Activity）
+
+模块带一个设置页（应用列表里的 **PICO compat settings**），两级结构：
+
+**第一级：应用列表**
+
+- 每个应用一行：**图标 + 名称 + 包名 + 版本**，带 `[XR]` 标记的是含 OpenXR 库的应用
+- 行尾开关：整个应用强制 VR
+- **点该行**（不是开关）进入第二级
+- 右上角切换 **简体中文 / English**（默认简体中文）
+- 底部统计已选数量 + 「保存并应用」
+
+**第二级：该应用的 Activity 列表**
+
+- 列出该包所有 Activity，逐个开关选择是否用 XR
+- 保存时写入 `pkg/Activity.Class` 形式，**保留其它包的规则**
+- 适合 VR 入口不是 launcher 的应用，例如 PICO Connect 的
+  `com.picoxr.streaming.deviceservice.StreamingGameActivity`
+
+为什么需要两级：PICO Connect 的配对页和 PICO 商店本身是 2D 面板，
+把整个包强制成 VR 会让它们打不开；所以既能按应用粗选，也能按 Activity 精选。
+
+| 属性 | 含义 |
+| --- | --- |
+| `persist.pico.vr.packages` | 按包名强制 VR（第一级开关写入） |
+| `persist.pico.vr.activities` | 按 Activity 强制 VR（第二级写入，`pkg/class` 或 `class`） |
+| `persist.pico.vrshell.forcevr` | `0` 完全关闭强制 VR |
+
+**规则实际存在文件里**（`/data/local/tmp/pico_xr_rules.conf`，0644 可读）：
+
+```
+P com.picovr.picostreamassistant
+A com.picovr.picostreamassistant/com.picoxr.streaming.deviceservice.StreamingGameActivity
+```
+
+原因：Android 的**属性值上限是 92 字节**（`PROP_VALUE_MAX`），一个 `pkg/Activity.Class`
+条目就超了：
+
+```
+Value '...' is too long, 144 bytes vs a max of 92
+```
+
+所以早期版本"保存失败"其实不是权限问题，是属性写不进去。改成文件后长度不再受限，
+属性只保留 `persist.pico.vrshell.forcevr` 这类短开关；文件缺失时钩子回退读属性以兼容旧配置。
+
+
+
+
+### 体感追踪器（com.pvr.swift）
+
+PICO 体感追踪器 App 启动时会问 `SwiftRepo.isVersionSupported(1)` 和 `(2)`，
+两个都 false 就把整个界面换成「系统更新需要」页，追踪器列表都出不来。
+
+答案来自 `SwiftAdapter.isVersionSupported` → `SwiftImpl`，它拿
+`ro.pui.build.version` 去和 `0x226`（550，即 5.5.0）比较，还读
+`ro.pxr.externalfunc`；Horizon OS 上这些条件都不成立。
+
+模块里的 `SwiftCompat` 在 `com.pvr.swift` 进程里把 `isVersionSupported`
+强制为 true，并让 `RomUtils.is570RomOrHigher / is590RomOrHigher` 返回 true，
+App 就能进到真正的界面（隐私协议 → 安全须知 → 追踪主页）。
+
+`persist.pico.swift.unlock=0` 可关闭。
+
+注意：页面能进不等于能追踪。真正的追踪仍然依赖 PICO 硬件追踪器通过
+PICO OS 的配对/服务栈上报姿态，Quest 上没有这套栈，所以最多做到「界面可用、
+显示未连接」。
+
 ## 已验证 / 未验证
 
 **已实测可用**

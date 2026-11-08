@@ -15,23 +15,64 @@
 #
 # The shim dlopen()s libopenxr_loader_real.so (Meta's loader) from the same
 # directory, and needs libc++ as well.
+#
+# Idempotent. A bind-mounted file reports the inode of its source, so comparing
+# dev:inode of the target with the shim tells us whether the overlay is already
+# in place. (Comparing the mount source path does not work: /proc/mounts reports
+# the underlying block device for file binds.) Duplicate layers left by an older
+# non-idempotent version are peeled off first.
 
 MODDIR=${0%/*}
 FILES="$MODDIR/files"
 LOG="$MODDIR/apply.log"
 
-log() { echo "$(date +%H:%M:%S) $*" >> "$LOG"; }
+log() { echo "$(date +%H:%M:%S) $*" >> "$LOG" 2>/dev/null; }
 
 SHIM="$FILES/libpico_openxr_loader.so"
-[ -f "$SHIM" ] || { echo "shim missing" > "$LOG"; exit 1; }
+[ -f "$SHIM" ] || { echo "shim missing" > "$LOG" 2>/dev/null; exit 1; }
+SHIM_ID=$(stat -c %d:%i "$SHIM" 2>/dev/null)
 
-: > "$LOG"
+: > "$LOG" 2>/dev/null
 log "applying"
 
 is_pico() {
     case "$1" in
         com.picovr.*|com.pico.*|com.picoxr.*|com.pvr.*|com.pxr.*|com.bytedance.pico.*) return 0 ;;
     esac
+    return 1
+}
+
+layers_of() {
+    grep -c " $1 " /proc/mounts 2>/dev/null || echo 0
+}
+
+already_overlaid() {
+    [ -n "$SHIM_ID" ] || return 1
+    [ "$(stat -c %d:%i "$1" 2>/dev/null)" = "$SHIM_ID" ]
+}
+
+# Peel duplicate layers until at most one remains.
+peel() {
+    target="$1"
+    guard=0
+    while [ "$(layers_of "$target")" -gt 1 ] && [ "$guard" -lt 200 ]; do
+        umount "$target" 2>/dev/null || umount -l "$target" 2>/dev/null || break
+        guard=$((guard + 1))
+    done
+}
+
+overlay_one() {
+    target="$1"
+    pkg="$2"
+    peel "$target"
+    if already_overlaid "$target"; then
+        return 0
+    fi
+    if mount --bind "$SHIM" "$target" 2>/dev/null; then
+        log "overlaid $pkg"
+        return 0
+    fi
+    log "bind failed for $pkg"
     return 1
 }
 
@@ -46,11 +87,7 @@ for pkg in $(pm list packages 2>/dev/null | sed 's/^package://'); do
     hit=0
     for name in libpico_openxr_loader.so libopenxr_loader.so; do
         [ -f "$dir/$name" ] || continue
-        if mount --bind "$SHIM" "$dir/$name" 2>/dev/null; then
-            hit=1
-        else
-            log "bind $name failed for $pkg"
-        fi
+        overlay_one "$dir/$name" "$pkg" && hit=1
     done
 
     if [ "$hit" = "1" ]; then
@@ -59,10 +96,10 @@ for pkg in $(pm list packages 2>/dev/null | sed 's/^package://'); do
             [ -f "$src" ] || continue
             dst="$dir/$extra"
             [ -f "$dst" ] || : > "$dst"
+            [ "$(layers_of "$dst")" -ge 1 ] && continue
             mount --bind "$src" "$dst" 2>/dev/null || log "bind $extra failed for $pkg"
         done
         count=$((count + 1))
-        log "overlaid $pkg"
     fi
 done
 log "done, $count package(s)"

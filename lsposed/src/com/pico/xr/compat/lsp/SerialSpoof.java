@@ -1,8 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 周-zhou (WCNMSSB) and DeepSeek
-//
-// This file is part of picoapponmhorizon.
-//
 package com.pico.xr.compat.lsp;
 
 import android.os.Build;
@@ -46,10 +41,28 @@ final class SerialSpoof {
      * UNSUPPORTED_DEVICE, which is what made PICO Connect show "Unknown" and
      * refuse to bring up the SteamVR HMD.
      */
-    private static final String FAKE_SERIAL = "PA8X2C3D4E5F6";
+    private static final String DEFAULT_SERIAL = "PA8X2C3D4E5F6";
     private static boolean sInstalled;
 
     private SerialSpoof() {
+    }
+
+    /**
+     * The serial can be overridden at runtime with persist.pico.serial, which is
+     * handy when PICO's backend starts rejecting one identity (risk control) and
+     * a fresh "device" is needed without rebuilding the module.
+     */
+    private static String serial() {
+        try {
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            String value = (String) sp.getMethod("get", String.class, String.class)
+                    .invoke(null, "persist.pico.serial", DEFAULT_SERIAL);
+            if (value != null && !value.trim().isEmpty()) {
+                return value.trim();
+            }
+        } catch (Throwable ignored) {
+        }
+        return DEFAULT_SERIAL;
     }
 
     private static void log(String msg) {
@@ -66,17 +79,17 @@ final class SerialSpoof {
             XposedHelpers.findAndHookMethod(Build.class, "getSerial", new XC_MethodHook() {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) {
-                    param.setResult(FAKE_SERIAL);
+                    param.setResult(serial());
                 }
             });
-            log("Build.getSerial -> " + FAKE_SERIAL);
+            log("Build.getSerial -> " + serial());
         } catch (Throwable t) {
             log("getSerial hook failed: " + t);
         }
         try {
             // Deprecated field, still read by older SDKs; harmless to set.
-            XposedHelpers.setStaticObjectField(Build.class, "SERIAL", FAKE_SERIAL);
-            log("Build.SERIAL -> " + FAKE_SERIAL);
+            XposedHelpers.setStaticObjectField(Build.class, "SERIAL", serial());
+            log("Build.SERIAL -> " + serial());
         } catch (Throwable t) {
             log("SERIAL field failed: " + t);
         }
